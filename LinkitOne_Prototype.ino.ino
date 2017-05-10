@@ -11,8 +11,12 @@
 #include "LWiFiClient.h"
 // Date and time
 #include <LDateTime.h>
-// UDP connection
+// GSM/GPRS connection
+#include <LGPRS.h>
+// UDP connections
 #include <LWiFiUDP.h>
+#include <LGPRSUdp.h>
+
 
 // WiFi AP login data
 #define WIFI_AP "Valentin iPhone"
@@ -24,13 +28,16 @@
 #define CACHE_FILE "cache.txt"
 #define LOCALSTORAGE_FILE "local.csv"
 
-// WiFi client for server communication
-LWiFiClient client;
+// WiFi or GPRS clients for server communication
+// LWiFiClient client;
+LGPRSClient client;
 
 // Time server
 #define TIME_SERVER "0.nl.pool.ntp.org" // a list of NTP servers: http://tf.nist.gov/tf-cgi/servers.cgi
-// UDP package for the time server
-LWiFiUDP Udp;
+// WiFi UDP package for the time server
+// LWiFiUDP Udp;
+// GPRS UDP package for the time server
+LGPRSUDP Udp;
 unsigned int localPort = 2390;      // local port to listen for UDP packets
 const int NTP_PACKET_SIZE = 48; // NTP time stamp is in the first 48 bytes of the message
 byte packetBuffer[NTP_PACKET_SIZE]; //buffer to hold incoming and outgoing packets
@@ -81,16 +88,24 @@ void setup() {
   Serial.println();
 
   // Start WiFI
-  LWiFi.begin();
-  Serial.print("Connecting to WiFi Access Point...");
-  while (0 == LWiFi.connect(WIFI_AP, LWiFiLoginInfo(WIFI_AUTH, WIFI_PASSWORD))) {
-    Serial.print(".");
+//  LWiFi.begin();
+//  Serial.print("Connecting to WiFi Access Point...");
+//  while (0 == LWiFi.connect(WIFI_AP, LWiFiLoginInfo(WIFI_AUTH, WIFI_PASSWORD))) {
+//    Serial.print(".");
+//    delay(1000);
+//  }
+//  Serial.println("connected.");
+//  Serial.println();
+//  // Print status when connected
+//  printWifiStatus();
+
+  // Connect to GPRS network
+  while(!LGPRS.attachGPRS("data.lycamobile.nl", "lmnl", "plus"))
+  {
     delay(1000);
+    Serial.println("retry connecting to GPRS network");
   }
-  Serial.println("connected.");
-  Serial.println();
-  // Print status when connected
-  printWifiStatus();
+  Serial.println("Connected to GPRS network");
 
   // Get time via Udp connection from NTP server
   getNtpTime();
@@ -130,7 +145,7 @@ void loop() {
   if (!usageDetected) {
     if (abs(currentValue - previousValue) > acceleromationTreshold) {
       usageDetected = true;
-      // Print manual timestamp of usage measurement
+      // Print timestamp of usage measurement
       Serial.print(getDateString(currentTime));
       Serial.println(": Usage detected! No more measurements till next update");
       Serial.println();
@@ -153,7 +168,7 @@ void loop() {
     previousMillisSend = currentMillisSend;
 
     // Send data to web server
-    //sendData();
+    sendData();
   }
 
   // Update the previous measured value with the current measured value
@@ -180,6 +195,10 @@ void writeToStorage() {
   } else {
     dataString += "0";
   }
+
+  dataString += ", ";
+
+  dataString += LBattery.level();
 
   Serial.println("Trying to access files on SD card");
 
@@ -270,31 +289,7 @@ void emptyCacheFile() {
 //________________________
 // HELPERS
 
-// get the current WiFi status printed
-void printWifiStatus() {
-  // print the current overall state of the connection
-  Serial.print("State: ");
-  Serial.println(LWiFi.status());
-  // print the SSID of the network you're attached to:
-  Serial.print("SSID: ");
-  Serial.println(LWiFi.SSID());
-  // print your WiFi shield's IP address:
-  IPAddress ip = LWiFi.localIP();
-  Serial.print("IP Address: ");
-  Serial.println(ip);
-  // print the subnet mask
-  Serial.print("subnet mask: ");
-  Serial.println(LWiFi.subnetMask());
-  // print the gateway ip
-  Serial.print("gateway IP: ");
-  Serial.println(LWiFi.gatewayIP());
-  // print the received signal strength:
-  long rssi = LWiFi.RSSI();
-  Serial.print("signal strength (RSSI):");
-  Serial.print(rssi);
-  Serial.println(" dBm");
-  Serial.println();
-}
+
 
 
 // Set time from global time variables
@@ -344,6 +339,14 @@ void getNtpTime() {
   sendNTPpacket();
   // wait to see if a reply is available
   delay(1000);
+
+  // If empty or false packet was received, try again
+  while (Udp.parsePacket() == 0) {
+    delay(1000);
+    Serial.println("Received empty or false UDP packet, retry...");
+    sendNTPpacket();
+    
+  }
 
   Serial.println( Udp.parsePacket() );
   if ( Udp.parsePacket() ) {
@@ -418,4 +421,36 @@ unsigned long sendNTPpacket() {
   Udp.write(packetBuffer, NTP_PACKET_SIZE);
   Udp.endPacket();
 }
+
+// Older functions currently not in use
+//____________________________________________
+
+// get the current WiFi status printed
+void printWifiStatus() {
+  // print the current overall state of the connection
+  Serial.print("State: ");
+  Serial.println(LWiFi.status());
+  // print the SSID of the network you're attached to:
+  Serial.print("SSID: ");
+  Serial.println(LWiFi.SSID());
+  // print your WiFi shield's IP address:
+  IPAddress ip = LWiFi.localIP();
+  Serial.print("IP Address: ");
+  Serial.println(ip);
+  // print the subnet mask
+  Serial.print("subnet mask: ");
+  Serial.println(LWiFi.subnetMask());
+  // print the gateway ip
+  Serial.print("gateway IP: ");
+  Serial.println(LWiFi.gatewayIP());
+  // print the received signal strength:
+  long rssi = LWiFi.RSSI();
+  Serial.print("signal strength (RSSI):");
+  Serial.print(rssi);
+  Serial.println(" dBm");
+  Serial.println();
+}
+
+
+
 
