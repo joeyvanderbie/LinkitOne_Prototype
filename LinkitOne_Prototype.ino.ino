@@ -14,11 +14,14 @@
 // Date and time
 #include <LDateTime.h>
 
+// On-board LED
+#define LED_BUILTIN 13
+
 // Server URL
 #define SERVER_URL "bootcamp01.000webhostapp.com"
 
 // SD card file names
-#define CACHE_FILE "cache.txt"
+#define CACHE_FILE "cache.csv"
 #define LOCALSTORAGE_FILE "local.csv"
 
 // GPRS client for server communication
@@ -71,6 +74,10 @@ int sec = 0;
 void setup() {
   Serial.begin(9600);
 
+  // Set on-board LED to output and turn it off
+  pinMode(LED_BUILTIN, OUTPUT);
+  digitalWrite(LED_BUILTIN, LOW);
+
   // Initialize the SD card
   Serial.print("Initializing SD card...");
   LSD.begin();
@@ -84,12 +91,13 @@ void setup() {
     Serial.println("retry connecting to GPRS network");
   }
   Serial.println("Connected to GPRS network");
-  // TODO: blink LED two times if connected
+  
+  // Blink LED to show connection to GPRS network established successfully
+  blinkSuccess(3, 500);
 
   // Get time via Udp connection from NTP server
   getNtpTime();
-  // TODO: blink LED three times if package received 
-
+ 
   // Set time (ntp time if udp request successful or manual time)
   setTime();
 
@@ -147,8 +155,8 @@ void loop() {
     // save the last time an update was sent
     previousMillisSend = currentMillisSend;
 
-    // Send data to web server
-    sendDataGet();
+    // Send data to web server (still in test state)
+    //sendDataGet();
   }
 
   // Update the previous measured value with the current measured value
@@ -168,7 +176,7 @@ void writeToStorage() {
   // String that gets written to local storage and cache files
   String dataString = "";
   dataString += getDateString(currentTime);
-  dataString += ", ";
+  dataString += ";";
 
   if (usageDetected) {
     dataString += "1";
@@ -176,7 +184,7 @@ void writeToStorage() {
     dataString += "0";
   }
 
-  dataString += ", ";
+  dataString += ";";
 
   dataString += LBattery.level();
 
@@ -340,19 +348,30 @@ String getDateString(datetimeInfo dti) {
   // Output format: "DD/MM/YY hh:mm:ss"
   String dateStr;
   dateStr += dti.day;
-  dateStr += "/";
+  dateStr += ".";
   dateStr += dti.mon;
-  dateStr += "/";
+  dateStr += ".";
   dateStr += dti.year;
-  dateStr += ", ";
+  dateStr += "; ";
   dateStr += dti.hour;
-  dateStr += ".";
+  dateStr += ":";
   dateStr += dti.min;
-  dateStr += ".";
+  dateStr += ":";
   dateStr += dti.sec;
   return dateStr;
   // TODO: work on string format to support easy processing with Excel
 }
+
+// Flash given number of times to react to successful task (e.g. GPRS connection established)
+void blinkSuccess(int numberOfBlinks, int blinkDuration) {
+  for (int i=0; i<numberOfBlinks; i++) {
+    delay(blinkDuration/2);
+    digitalWrite(LED_BUILTIN, HIGH);
+    delay(blinkDuration/2);
+    digitalWrite(LED_BUILTIN, LOW);
+  }
+}
+
 
 
 // NTP time server stuff
@@ -377,6 +396,9 @@ void getNtpTime() {
     Serial.println("Received empty or false UDP packet, retry...");
     sendNTPpacket();
   }
+  
+  // Blink LED to show package received successfully
+  blinkSuccess(4, 500);
 
   Serial.println( Udp.parsePacket() );
   if ( Udp.parsePacket() ) {
