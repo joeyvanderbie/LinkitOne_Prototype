@@ -5,41 +5,27 @@
 #include <LBattery.h>
 // SD card
 #include <LSD.h>
-// WiFi connection
-#include <LWiFi.h>
-// Sending data to web server
-#include "LWiFiClient.h"
-#include <LGPRSClient.h>
-// Date and time
-#include <LDateTime.h>
 // GSM/GPRS connection
 #include <LGPRS.h>
-// UDP connections (currently used for timestamp)
-#include <LWiFiUDP.h>
+// Sending data to web server
+#include <LGPRSClient.h>
+// UDP connection (currently used for timestamp)
 #include <LGPRSUdp.h>
+// Date and time
+#include <LDateTime.h>
 
-char server[] = "bootcamp01.000webhostapp.com";
-
-
-
-// WiFi AP login data
-#define WIFI_AP "Valentin iPhone"
-#define WIFI_PASSWORD "valentin"
-#define WIFI_AUTH LWIFI_WPA  // choose from LWIFI_OPEN, LWIFI_WPA, or LWIFI_WEP.
+// Server URL
 #define SERVER_URL "bootcamp01.000webhostapp.com"
 
 // SD card file names
 #define CACHE_FILE "cache.txt"
 #define LOCALSTORAGE_FILE "local.csv"
 
-// WiFi or GPRS clients for server communication
-// LWiFiClient client;
+// GPRS client for server communication
 LGPRSClient client;
 
 // Time server
 #define TIME_SERVER "0.nl.pool.ntp.org" // a list of NTP servers: http://tf.nist.gov/tf-cgi/servers.cgi
-// WiFi UDP package for the time server
-// LWiFiUDP Udp;
 // GPRS UDP package for the time server
 LGPRSUDP Udp;
 unsigned int localPort = 2390;      // local port to listen for UDP packets
@@ -53,10 +39,10 @@ datetimeInfo currentTime;
 ADXL345 adxl;
 
 // Intervals to proceed with periodical operations
-// 20 seconds
-const long millisIntervalStore = 20000;
 // 60 seconds
-const long millisIntervalSend = 20000;
+const long millisIntervalStore = 60000;
+// 1800 seconds (30 minutes)
+const long millisIntervalSend = 1800000;
 
 // long value for millis operations
 unsigned long previousMillisStore = 0;
@@ -75,8 +61,8 @@ const int acceleromationTreshold = 20;
 
 // manual time variables
 int year = 2017;
-int mon = 4;
-int day = 13;
+int mon = 5;
+int day = 12;
 int hour = 0;
 int min = 0;
 int sec = 0;
@@ -91,18 +77,6 @@ void setup() {
   Serial.println("card initialized.");
   Serial.println();
 
-  // Start WiFI
-//  LWiFi.begin();
-//  Serial.print("Connecting to WiFi Access Point...");
-//  while (0 == LWiFi.connect(WIFI_AP, LWiFiLoginInfo(WIFI_AUTH, WIFI_PASSWORD))) {
-//    Serial.print(".");
-//    delay(1000);
-//  }
-//  Serial.println("connected.");
-//  Serial.println();
-//  // Print status when connected
-//  printWifiStatus();
-
   // Connect to GPRS network
   while(!LGPRS.attachGPRS("data.lycamobile.nl", "lmnl", "plus"))
   {
@@ -110,9 +84,11 @@ void setup() {
     Serial.println("retry connecting to GPRS network");
   }
   Serial.println("Connected to GPRS network");
+  // TODO: blink LED two times if connected
 
   // Get time via Udp connection from NTP server
   getNtpTime();
+  // TODO: blink LED three times if package received 
 
   // Set time (ntp time if udp request successful or manual time)
   setTime();
@@ -138,11 +114,11 @@ void loop() {
   // Print all measured differences for treshold testing purposes
   Serial.print("Z: ");
   Serial.println(abs(currentValue - previousValue));
-  Serial.print("X: ");
-  Serial.println(abs(x - previousValueX));
-  Serial.print("Y: ");
-  Serial.println(abs(y - previousValueY));
-  Serial.println();
+//  Serial.print("X: ");
+//  Serial.println(abs(x - previousValueX));
+//  Serial.print("Y: ");
+//  Serial.println(abs(y - previousValueY));
+//  Serial.println();
   
   
   // If no usage was detected, still look for it.
@@ -177,8 +153,8 @@ void loop() {
 
   // Update the previous measured value with the current measured value
   previousValue = currentValue;
-  previousValueX = x;
-  previousValueY = y;
+//  previousValueX = x;
+//  previousValueY = y;
 
   // Wait to not overload
   delay(700);
@@ -244,6 +220,7 @@ void writeToStorage() {
   usageDetected = false;
 }
 
+// Test function: Send POST request to php server (with test data)
 void sendDataPost() {
 
   String postData = "Hello server :)"; 
@@ -272,18 +249,19 @@ void sendDataPost() {
   
 }
 
+// Test function: Send GET request to php server (with test data)
 void sendDataGet() {
 
    // if you get a connection, report back via serial:
   Serial.print("Connect to ");
-  Serial.println(server);
-  if (client.connect(server, 80))
+  Serial.println(SERVER_URL);
+  if (client.connect(SERVER_URL, 80))
   {
     Serial.println("connected");
     // Make a HTTP request:
     client.print("GET /insert_into.php?used=1&dname=LinkitOne HTTP/1.1");
     client.print("Host: ");
-    client.println(server);
+    client.println(SERVER_URL);
     client.println("Connection: close");
     client.println(); // Empty line
     client.println(); // Empty line
@@ -344,9 +322,6 @@ void emptyCacheFile() {
 //________________________
 // HELPERS
 
-
-
-
 // Set time from global time variables
 void setTime() {
   // Set time stamp manually
@@ -360,7 +335,7 @@ void setTime() {
   LDateTime.setTime(&now);
 }
 
-// Retunrs readable date string for timestamp
+// Returns readable date string for timestamp
 String getDateString(datetimeInfo dti) {
   // Output format: "DD/MM/YY hh:mm:ss"
   String dateStr;
@@ -376,6 +351,7 @@ String getDateString(datetimeInfo dti) {
   dateStr += ".";
   dateStr += dti.sec;
   return dateStr;
+  // TODO: work on string format to support easy processing with Excel
 }
 
 
@@ -400,7 +376,6 @@ void getNtpTime() {
     delay(1000);
     Serial.println("Received empty or false UDP packet, retry...");
     sendNTPpacket();
-    
   }
 
   Serial.println( Udp.parsePacket() );
@@ -476,36 +451,4 @@ unsigned long sendNTPpacket() {
   Udp.write(packetBuffer, NTP_PACKET_SIZE);
   Udp.endPacket();
 }
-
-// Older functions currently not in use
-//____________________________________________
-
-// get the current WiFi status printed
-void printWifiStatus() {
-  // print the current overall state of the connection
-  Serial.print("State: ");
-  Serial.println(LWiFi.status());
-  // print the SSID of the network you're attached to:
-  Serial.print("SSID: ");
-  Serial.println(LWiFi.SSID());
-  // print your WiFi shield's IP address:
-  IPAddress ip = LWiFi.localIP();
-  Serial.print("IP Address: ");
-  Serial.println(ip);
-  // print the subnet mask
-  Serial.print("subnet mask: ");
-  Serial.println(LWiFi.subnetMask());
-  // print the gateway ip
-  Serial.print("gateway IP: ");
-  Serial.println(LWiFi.gatewayIP());
-  // print the received signal strength:
-  long rssi = LWiFi.RSSI();
-  Serial.print("signal strength (RSSI):");
-  Serial.print(rssi);
-  Serial.println(" dBm");
-  Serial.println();
-}
-
-
-
 
