@@ -14,9 +14,6 @@
 // Date and time
 #include <LDateTime.h>
 
-// On-board LED
-#define LED_BUILTIN 13
-
 // Server URL
 #define SERVER_URL "bootcamp01.000webhostapp.com"
 
@@ -74,10 +71,6 @@ int sec = 0;
 void setup() {
   Serial.begin(9600);
 
-  // Set on-board LED to output and turn it off
-  pinMode(LED_BUILTIN, OUTPUT);
-  digitalWrite(LED_BUILTIN, LOW);
-
   // Initialize the SD card
   Serial.print("Initializing SD card...");
   LSD.begin();
@@ -91,10 +84,7 @@ void setup() {
     Serial.println("retry connecting to GPRS network");
   }
   Serial.println("Connected to GPRS network");
-  
-  // Blink LED to show connection to GPRS network established successfully
-  blinkSuccess(3, 500);
-
+ 
   // Get time via Udp connection from NTP server
   getNtpTime();
  
@@ -362,17 +352,6 @@ String getDateString(datetimeInfo dti) {
   // TODO: work on string format to support easy processing with Excel
 }
 
-// Flash given number of times to react to successful task (e.g. GPRS connection established)
-void blinkSuccess(int numberOfBlinks, int blinkDuration) {
-  for (int i=0; i<numberOfBlinks; i++) {
-    delay(blinkDuration/2);
-    digitalWrite(LED_BUILTIN, HIGH);
-    delay(blinkDuration/2);
-    digitalWrite(LED_BUILTIN, LOW);
-  }
-}
-
-
 
 // NTP time server stuff
 //____________________________________________
@@ -397,9 +376,6 @@ void getNtpTime() {
     sendNTPpacket();
   }
   
-  // Blink LED to show package received successfully
-  blinkSuccess(4, 500);
-
   Serial.println( Udp.parsePacket() );
   if ( Udp.parsePacket() ) {
     Serial.println("Udp packet received");
