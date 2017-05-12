@@ -9,20 +9,24 @@
 #include <LWiFi.h>
 // Sending data to web server
 #include "LWiFiClient.h"
+#include <LGPRSClient.h>
 // Date and time
 #include <LDateTime.h>
 // GSM/GPRS connection
 #include <LGPRS.h>
-// UDP connections
+// UDP connections (currently used for timestamp)
 #include <LWiFiUDP.h>
 #include <LGPRSUdp.h>
+
+char server[] = "bootcamp01.000webhostapp.com";
+
 
 
 // WiFi AP login data
 #define WIFI_AP "Valentin iPhone"
 #define WIFI_PASSWORD "valentin"
 #define WIFI_AUTH LWIFI_WPA  // choose from LWIFI_OPEN, LWIFI_WPA, or LWIFI_WEP.
-#define SERVER_URL "https://bootcamp01.000webhostapp.com/"
+#define SERVER_URL "bootcamp01.000webhostapp.com"
 
 // SD card file names
 #define CACHE_FILE "cache.txt"
@@ -52,7 +56,7 @@ ADXL345 adxl;
 // 20 seconds
 const long millisIntervalStore = 20000;
 // 60 seconds
-const long millisIntervalSend = 60000;
+const long millisIntervalSend = 20000;
 
 // long value for millis operations
 unsigned long previousMillisStore = 0;
@@ -168,7 +172,7 @@ void loop() {
     previousMillisSend = currentMillisSend;
 
     // Send data to web server
-    sendData();
+    sendDataGet();
   }
 
   // Update the previous measured value with the current measured value
@@ -240,6 +244,60 @@ void writeToStorage() {
   usageDetected = false;
 }
 
+void sendDataPost() {
+
+  String postData = "Hello server :)"; 
+  
+  // if you get a connection, report back via serial:
+  Serial.print("Connecting to ");
+  Serial.println("https://httpbin.org/post");
+  if (client.connect("https://httpbin.org/post", 80))
+  {
+    Serial.println("connected");
+    client.println("POST /tinyFittings/index.php HTTP/1.1");
+    client.println("Host:  artiswrong.com");
+    client.println("User-Agent: Arduino/1.0");
+    client.println("Connection: close");
+    client.println("Content-Type: application/x-www-form-urlencoded;");
+    client.print("Content-Length: ");
+    client.println(postData.length());
+    client.println();
+    client.println(postData);
+  }
+  else
+  {
+    // if you didn't get a connection to the server:
+    Serial.println("connection failed");
+  }
+  
+}
+
+void sendDataGet() {
+
+   // if you get a connection, report back via serial:
+  Serial.print("Connect to ");
+  Serial.println(server);
+  if (client.connect(server, 80))
+  {
+    Serial.println("connected");
+    // Make a HTTP request:
+    client.print("GET /insert_into.php?used=1&dname=LinkitOne HTTP/1.1");
+    client.print("Host: ");
+    client.println(server);
+    client.println("Connection: close");
+    client.println(); // Empty line
+    client.println(); // Empty line
+    client.stop();    // Closing connection to server
+    Serial.println("--> finished transmission\n"); 
+    client.println();
+  }
+  else
+  {
+    // if you didn't get a connection to the server:
+    Serial.println("connection failed");
+  }
+}
+
 
 // Send data from cache/buffer file to web server
 void sendData() {
@@ -273,9 +331,6 @@ void sendData() {
         // if the file didn't open, print an error:
         Serial.println("sendData(): error opening test.txt");
     }
-  
-  
-
 }
 
 
