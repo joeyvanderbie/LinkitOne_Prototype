@@ -393,6 +393,9 @@ void getNtpTime() {
     Serial.print("Seconds since Jan 1 1900 = " );
     Serial.println(secsSince1900);
 
+    // subtract 2 hours to get Amsterdam timezone
+    secsSince1900 = secsSince1900 + 7200;
+
     // now convert NTP time into everyday time:
     Serial.print("Unix time = ");
     // Unix time starts on Jan 1 1970. In seconds, that's 2208988800:
@@ -406,6 +409,7 @@ void getNtpTime() {
     Serial.print("The UTC time is ");       // UTC is the time at Greenwich Meridian (GMT)
     // Set global hour variable
     hour = (epoch  % 86400L) / 3600;
+    
     Serial.print(hour); // print the hour (86400 equals secs per day)
     Serial.print(':');
     if ( ((epoch % 3600) / 60) < 10 ) {
