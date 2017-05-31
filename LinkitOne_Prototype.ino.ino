@@ -14,15 +14,21 @@
 // Date and time
 #include <LDateTime.h>
 
-// Server URL
-#define SERVER_URL "bootcamp01.000webhostapp.com"
+#define DEVICE_NAME "cruyff_court_01"
 
 // SD card file names
-#define CACHE_FILE "cache.csv"
+// temporarly contains information in JSON format style
+// Line format -> {"time": "YYYY-MM-DD HH:MM:SS", "state": 1, "battery": 100}
+#define CACHE_FILE "cache.txt"
+// contains all information in excel format style 
+// Line format -> DD.MM.YYYY; HH:MM:SS; 1; 100
 #define LOCALSTORAGE_FILE "local.csv"
 
 // GPRS client for server communication
 LGPRSClient client;
+
+// Server URL
+#define SERVER_URL "bootcamp01.000webhostapp.com"
 
 // Time server
 #define TIME_SERVER "0.nl.pool.ntp.org" // a list of NTP servers: http://tf.nist.gov/tf-cgi/servers.cgi
@@ -39,10 +45,10 @@ datetimeInfo currentTime;
 ADXL345 adxl;
 
 // Intervals to proceed with periodical operations
-// 60 seconds
-const long millisIntervalStore = 60000;
+// 10 seconds (will be 5 minutes in final version)
+const long millisIntervalStore = 10000;
 // 1800 seconds (30 minutes)
-const long millisIntervalSend = 1800000;
+const long millisIntervalSend = 180000;
 
 // long value for millis operations
 unsigned long previousMillisStore = 0;
@@ -59,10 +65,10 @@ int previousValueY = 0;
 // treshold when acceleration is triggered as movement/usage
 const int acceleromationTreshold = 20;
 
-// manual time variables
+// manual time variables (IMPORTANT: needs to be manually updated before placing sensor)
 int year = 2017;
 int mon = 5;
-int day = 12;
+int day = 31;
 int hour = 0;
 int min = 0;
 int sec = 0;
@@ -78,16 +84,16 @@ void setup() {
   Serial.println();
 
   // Connect to GPRS network
-  while(!LGPRS.attachGPRS("data.lycamobile.nl", "lmnl", "plus"))
+  while (!LGPRS.attachGPRS("data.lycamobile.nl", "lmnl", "plus"))
   {
     delay(1000);
     Serial.println("retry connecting to GPRS network");
   }
   Serial.println("Connected to GPRS network");
- 
+
   // Get time via Udp connection from NTP server
   getNtpTime();
- 
+
   // Set time (ntp time if udp request successful or manual time)
   setTime();
 
@@ -112,13 +118,13 @@ void loop() {
   // Print all measured differences for treshold testing purposes
   Serial.print("Z: ");
   Serial.println(abs(currentValue - previousValue));
-//  Serial.print("X: ");
-//  Serial.println(abs(x - previousValueX));
-//  Serial.print("Y: ");
-//  Serial.println(abs(y - previousValueY));
-//  Serial.println();
-  
-  
+  //  Serial.print("X: ");
+  //  Serial.println(abs(x - previousValueX));
+  //  Serial.print("Y: ");
+  //  Serial.println(abs(y - previousValueY));
+  //  Serial.println();
+
+
   // If no usage was detected, still look for it.
   if (!usageDetected) {
     if (abs(currentValue - previousValue) > acceleromationTreshold) {
@@ -130,15 +136,16 @@ void loop() {
     }
   }
 
-  // Store data every x minutes/seconds
+  // Store (measured state) data every x minutes/seconds
   if (currentMillisStore - previousMillisStore >= millisIntervalStore) {
     // save the last time an update was sent
     previousMillisStore = currentMillisStore;
 
     // Write to SD card
     writeToStorage();
+    // Reset detection boolean
+    usageDetected = false;
   }
-
 
   // Send data every x minutes/seconds
   if (currentMillisSend - previousMillisSend >= millisIntervalSend) {
@@ -146,13 +153,13 @@ void loop() {
     previousMillisSend = currentMillisSend;
 
     // Send data to web server (still in test state)
-    //sendDataGet();
+    sendData();
   }
 
   // Update the previous measured value with the current measured value
   previousValue = currentValue;
-//  previousValueX = x;
-//  previousValueY = y;
+  //  previousValueX = x;
+  //  previousValueY = y;
 
   // Wait to not overload
   delay(700);
@@ -163,32 +170,20 @@ void loop() {
 // Write current Timestamp and usage to the SD card
 void writeToStorage() {
 
-  // String that gets written to local storage and cache files
-  String dataString = "";
-  dataString += getDateString(currentTime);
-  dataString += ";";
-
-  if (usageDetected) {
-    dataString += "1";
-  } else {
-    dataString += "0";
-  }
-
-  dataString += ";";
-
-  dataString += LBattery.level();
-
-  Serial.println("Trying to access files on SD card");
-
+  // Create strings that will be written to the SD card files
+  String cacheString = buildJsonString();
+  String localString = buildExcelString();
+ 
   // Open cache file with write access
+  Serial.println("Trying to access files on SD card");
   LFile dataFile = LSD.open(CACHE_FILE, FILE_WRITE);
   Serial.println("Cache file opened");
   // if the file is available, write to it:
   if (dataFile) {
-    dataFile.println(dataString);
+    dataFile.println(cacheString);
     dataFile.close();
     // print to the serial port too:
-    Serial.println(dataString);
+    Serial.println(cacheString);
     Serial.println("Cache file written and closed");
   }
   // if the file isn't open, pop up an error:
@@ -201,10 +196,10 @@ void writeToStorage() {
   Serial.println("Local storage file opened");
   // if the file is available, write to it:
   if (dataFile) {
-    dataFile.println(dataString);
+    dataFile.println(localString);
     dataFile.close();
     // print to the serial port too:
-    Serial.println(dataString);
+    Serial.println(localString);
     Serial.println("Local storage file written and closed");
   }
   // if the file isn't open, pop up an error:
@@ -213,112 +208,84 @@ void writeToStorage() {
   }
 
   Serial.println();
-
-  // Reset detection boolean
-  usageDetected = false;
 }
 
-// Test function: Send POST request to php server (with test data)
-void sendDataPost() {
-
-  String postData = "Hello server :)"; 
-  
-  // if you get a connection, report back via serial:
-  Serial.print("Connecting to ");
-  Serial.println("https://httpbin.org/post");
-  if (client.connect("https://httpbin.org/post", 80))
-  {
-    Serial.println("connected");
-    client.println("POST /tinyFittings/index.php HTTP/1.1");
-    client.println("Host:  artiswrong.com");
-    client.println("User-Agent: Arduino/1.0");
-    client.println("Connection: close");
-    client.println("Content-Type: application/x-www-form-urlencoded;");
-    client.print("Content-Length: ");
-    client.println(postData.length());
-    client.println();
-    client.println(postData);
-  }
-  else
-  {
-    // if you didn't get a connection to the server:
-    Serial.println("connection failed");
-  }
-  
-}
-
-// Test function: Send GET request to php server (with test data)
-void sendDataGet() {
-
-   // if you get a connection, report back via serial:
-  Serial.print("Connect to ");
-  Serial.println(SERVER_URL);
-  if (client.connect(SERVER_URL, 80))
-  {
-    Serial.println("connected");
-    // Make a HTTP request:
-    client.print("GET /insert_into.php?used=1&dname=LinkitOne HTTP/1.1");
-    client.print("Host: ");
-    client.println(SERVER_URL);
-    client.println("Connection: close");
-    client.println(); // Empty line
-    client.println(); // Empty line
-    client.stop();    // Closing connection to server
-    Serial.println("--> finished transmission\n"); 
-    client.println();
-  }
-  else
-  {
-    // if you didn't get a connection to the server:
-    Serial.println("connection failed");
-  }
-}
-
-
-// Send data from cache/buffer file to web server
 void sendData() {
-  Serial.println("Sending data to web server...");
-  // TODO: If sending successful: empty cache file, if sending not successfull: keep going with
-  // filled cache will till next try.
+  // TODO: Implement building JSON String and send that string via POST method to server
+  
+  Serial.println("Sending data to webserver...");
+  buildJson();
 
-  // keep retrying until connected to website
-  Serial.print("Connecting to website...");
-  while (0 == client.connect(SERVER_URL, 80))
-  {
-    Serial.println(".");
-    delay(1000);
-  }
-  // TODO: Stop after 5 attempts to not interupt the whole code
-
-  // Open file from sd card
-  LFile dataFile = LSD.open(CACHE_FILE);
-  // TODO: Open the file and post the contents or the whole file to the php web server for processing
-  // TODO: If post successfull empty the cache file contents, in not successful, keep the cache contents
-  if (dataFile) {
-        Serial.println("test.txt:");
-        dataFile.seek(0);
-        // read from the file until there's nothing else in it:
-        while (dataFile.available()) {            
-            Serial.write(dataFile.read());
-        }
-        // close the file:
-        dataFile.close();
-    } else {
-        // if the file didn't open, print an error:
-        Serial.println("sendData(): error opening test.txt");
-    }
+  // TODO: If success response from server -> emptyCache
 }
 
-
-// Empty (or delete) the cache file on the SD card
-void emptyCacheFile() {
-  // TODO: Clear the chache file contents (e.g. when sending to server was successful)
-}
 
 
 
 //________________________
 // HELPERS
+
+String buildJson(){
+  // TODO: create JSON (string) file for server from data of cache file
+  
+}
+
+// Empty (or delete) the cache file on the SD card
+void emptyCache() {
+  // TODO: Clear the chache file contents (e.g. when sending to server was successful)
+}
+
+// Returns one line string for the cache.txt file
+String buildJsonString() {
+    
+  String returnString;
+  returnString += "{";
+  returnString += "\"time\": ";
+  returnString += "\"";
+  returnString += getDateString(currentTime);
+  returnString += " ";
+  returnString += getTimeString(currentTime);
+  returnString += "\"";
+  returnString += ",";
+  returnString += "\"state\": ";
+  returnString += "\"";
+  if (usageDetected) {
+    returnString += "1";
+  } else {
+    returnString += "0";
+  }
+  returnString += "\"";
+  returnString += ",";
+  returnString += "\"battery\": ";
+  returnString += "\"";
+  returnString += LBattery.level();
+  returnString += "\"";
+  returnString += "}";
+  
+  return returnString;
+}
+
+// Returns one line string for the local.csv file
+String buildExcelString() {
+
+  // String that gets written to local storage and cache files
+  String returnString;
+  
+  returnString += getDateString(currentTime);
+  returnString += " ";
+  returnString += getTimeString(currentTime);
+  returnString += ";";
+  if (usageDetected) {
+    returnString += "1";
+  } else {
+    returnString += "0";
+  }
+  returnString += ";";
+  returnString += LBattery.level();
+
+  return returnString;
+}
+
 
 // Set time from global time variables
 void setTime() {
@@ -335,23 +302,27 @@ void setTime() {
 
 // Returns readable date string for timestamp
 String getDateString(datetimeInfo dti) {
-  // Output format: "DD/MM/YY hh:mm:ss"
+  // Output format: "YYYY-MM-DD"
   String dateStr;
-  dateStr += dti.day;
-  dateStr += ".";
-  dateStr += dti.mon;
-  dateStr += ".";
   dateStr += dti.year;
-  dateStr += "; ";
-  dateStr += dti.hour;
-  dateStr += ":";
-  dateStr += dti.min;
-  dateStr += ":";
-  dateStr += dti.sec;
+  dateStr += "-";
+  dateStr += dti.mon;
+  dateStr += "-";
+  dateStr += dti.day;
   return dateStr;
-  // TODO: work on string format to support easy processing with Excel
 }
 
+// Returns readable time string for timestamp
+String getTimeString(datetimeInfo dti) {
+  // Output format: "HH:MM:SS"
+  String timeStr;
+  timeStr += dti.hour;
+  timeStr += ":";
+  timeStr += dti.min;
+  timeStr += ":";
+  timeStr += dti.sec;
+  return timeStr;
+}
 
 // NTP time server stuff
 //____________________________________________
@@ -375,7 +346,7 @@ void getNtpTime() {
     Serial.println("Received empty or false UDP packet, retry...");
     sendNTPpacket();
   }
-  
+
   Serial.println( Udp.parsePacket() );
   if ( Udp.parsePacket() ) {
     Serial.println("Udp packet received");
@@ -409,7 +380,7 @@ void getNtpTime() {
     Serial.print("The UTC time is ");       // UTC is the time at Greenwich Meridian (GMT)
     // Set global hour variable
     hour = (epoch  % 86400L) / 3600;
-    
+
     Serial.print(hour); // print the hour (86400 equals secs per day)
     Serial.print(':');
     if ( ((epoch % 3600) / 60) < 10 ) {
