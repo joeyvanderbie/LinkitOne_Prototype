@@ -11,17 +11,17 @@
 #include <LGPRS.h>
 // Sending data to web server
 #include <LGPRSClient.h>
-// UDP connection (currently used for timestamp)
+// UDP connection (used for timestamp)
 #include <LGPRSUdp.h>
 // Date and time
 #include <LDateTime.h>
 
-// Set device name for each individual device
+// Device name (for each device individual)
 #define DEVICE_NAME "cruyff_court_01"
 
 // SD card file names
 // temporarly contains information in JSON format style
-// Line format -> {"time": "YYYY-MM-DD HH:MM:SS", "state": 1, "battery": 100}
+// Line format -> {"time": "YYYY-MM-DD HH:MM:SS", "state": "1", "battery": "100"}
 #define CACHE_FILE "cache.txt"
 // contains all information in excel format style
 // Line format -> DD.MM.YYYY; HH:MM:SS; 1; 100
@@ -39,12 +39,15 @@ LGPRSClient client;
 // #define SERVER_URL "www.httpbin.org"
 
 // Time server
-#define TIME_SERVER "0.nl.pool.ntp.org" // a list of NTP servers: http://tf.nist.gov/tf-cgi/servers.cgi
+#define TIME_SERVER "0.nl.pool.ntp.org"
 // GPRS UDP package for the time server
 LGPRSUDP Udp;
-unsigned int localPort = 2390;      // local port to listen for UDP packets
-const int NTP_PACKET_SIZE = 48; // NTP time stamp is in the first 48 bytes of the message
-byte packetBuffer[NTP_PACKET_SIZE]; //buffer to hold incoming and outgoing packets
+// local port to listen for UDP packets
+unsigned int localPort = 2390;  
+// NTP time stamp is in the first 48 bytes of the message    
+const int NTP_PACKET_SIZE = 48; 
+//buffer to hold incoming and outgoing packets
+byte packetBuffer[NTP_PACKET_SIZE]; 
 
 // datetimeinfo variable that should hold the current time after the setup
 datetimeInfo currentTime;
@@ -83,6 +86,7 @@ int sec = 0;
 
 
 void setup() {
+  
   Serial.begin(9600);
 
   // Initialize the SD card
@@ -177,6 +181,7 @@ void loop() {
 
 
 // Write current Timestamp and usage to the SD card
+//__________________________________________________________________
 void writeToStorage() {
 
   // Create strings that will be written to the SD card files
@@ -218,10 +223,12 @@ void writeToStorage() {
   Serial.println();
 }
 
-// Build JSON String and send that string via POST method to server
-void sendData() {
-  // Tutorial: https://ubidots.com/docs/devices/linkitoneWiFi.html#send-multiple-values-to-ubidots
 
+// Build JSON String and send that string via POST method to server
+//__________________________________________________________________
+void sendData() {
+
+  // create payload to send to server
   String payload = buildJson();
 
   // Try to connect to the webserver
@@ -270,7 +277,10 @@ void sendData() {
 
 //________________________
 // HELPERS
+//________________________
 
+// Return string in JSON style format containing the contents of the cache file
+//__________________________________________________________________
 String buildJson() {
   // TODO: Update buildJson to get rid of null value at the end and have comma in same line
 
@@ -314,7 +324,9 @@ String buildJson() {
   return returnString;
 }
 
+
 // Empty (or delete) the cache file on the SD card
+//__________________________________________________________________
 void emptyCache() {
   // TODO: Clear the chache file contents (e.g. when sending to server was successful)
 
@@ -331,7 +343,9 @@ void emptyCache() {
   }
 }
 
-// Returns one line string for the cache.txt file
+
+// Return one line string for the cache.txt file
+//__________________________________________________________________
 String buildJsonString() {
 
   String returnString;
@@ -361,7 +375,8 @@ String buildJsonString() {
   return returnString;
 }
 
-// Returns one line string for the local.csv file
+// Return one line string for the local.csv file
+//__________________________________________________________________
 String buildExcelString() {
 
   // String that gets written to local storage and cache files
@@ -384,6 +399,7 @@ String buildExcelString() {
 
 
 // Set time from global time variables
+//__________________________________________________________________
 void setTime() {
   // Set time stamp manually
   datetimeInfo now;
@@ -396,7 +412,9 @@ void setTime() {
   LDateTime.setTime(&now);
 }
 
-// Returns readable date string for timestamp
+
+// Return readable date string for timestamp
+//__________________________________________________________________
 String getDateString(datetimeInfo dti) {
   // Output format: "YYYY-MM-DD"
   String dateStr;
@@ -408,7 +426,9 @@ String getDateString(datetimeInfo dti) {
   return dateStr;
 }
 
-// Returns readable time string for timestamp
+
+// Return readable time string for timestamp
+//__________________________________________________________________
 String getTimeString(datetimeInfo dti) {
   // Output format: "HH:MM:SS"
   String timeStr;
@@ -420,11 +440,19 @@ String getTimeString(datetimeInfo dti) {
   return timeStr;
 }
 
-// NTP time server
-//____________________________________________
 
-// Connect to udp/time server, https://github.com/brucetsao/techbang/blob/master/201511/LinkIt-ONE-IDE/hardware/arduino/mtk/libraries/LGPRS/examples/GPRSUdpNtpClient/GPRSUdpNtpClient.ino
+
+//________________________
+// NTP time server
+//________________________
+
+
+// Connect to udp/time server
+//__________________________________________________________________
 void getNtpTime() {
+
+  // Tutorial: https://github.com/brucetsao/techbang/blob/master/201511/LinkIt-ONE-IDE/hardware/arduino/mtk/libraries/LGPRS/examples/GPRSUdpNtpClient/GPRSUdpNtpClient.ino
+
   Serial.print("\nStarting connection to time server...");
   while (!Udp.begin(localPort)) {
     Serial.println("retry begin");
@@ -498,7 +526,9 @@ void getNtpTime() {
   Serial.println();
 }
 
-// send an NTP request to the time server at the given address
+
+// Send an NTP request to the time server at the given address
+//__________________________________________________________________
 unsigned long sendNTPpacket() {
   Serial.println("sendNTPpacket");
   // set all bytes in the buffer to 0
@@ -514,9 +544,9 @@ unsigned long sendNTPpacket() {
   packetBuffer[14]  = 49;
   packetBuffer[15]  = 52;
 
-  // all NTP fields have been given values, now
-  // you can send a packet requesting a timestamp:
-  Udp.beginPacket(TIME_SERVER, 123); //NTP requests are to port 123
+  // all NTP fields have been given values, now you can send a packet requesting a timestamp:
+  // NTP requests are to port 123
+  Udp.beginPacket(TIME_SERVER, 123);
   Udp.write(packetBuffer, NTP_PACKET_SIZE);
   Udp.endPacket();
 }
