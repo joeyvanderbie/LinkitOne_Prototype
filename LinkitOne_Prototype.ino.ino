@@ -77,6 +77,7 @@ int previousValueY = 0;
 const int acceleromationTreshold = 20;
 
 // manual time variables (IMPORTANT: needs to be manually updated before placing sensor)
+// TODO: Find a funtion to calculate the date out of the UNIX timestamp
 int year = 2017;
 int mon = 5;
 int day = 31;
@@ -287,6 +288,9 @@ String buildJson() {
   // Start return string by opening square brackets
   String returnString = "[";
   // returnString += "\n";
+  returnString += "{\"name\": ";
+  returnString += DEVICE_NAME;
+  returnString += "},";
 
   // Open file from sd card
   dataFile = LSD.open(CACHE_FILE);
