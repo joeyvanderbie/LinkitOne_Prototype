@@ -5,6 +5,8 @@
 #include <LBattery.h>
 // SD card
 #include <LSD.h>
+// File management
+#include <LStorage.h>
 // GSM/GPRS connection
 #include <LGPRS.h>
 // Sending data to web server
@@ -14,21 +16,27 @@
 // Date and time
 #include <LDateTime.h>
 
+// Set device name for each individual device
 #define DEVICE_NAME "cruyff_court_01"
 
 // SD card file names
 // temporarly contains information in JSON format style
 // Line format -> {"time": "YYYY-MM-DD HH:MM:SS", "state": 1, "battery": 100}
 #define CACHE_FILE "cache.txt"
-// contains all information in excel format style 
+// contains all information in excel format style
 // Line format -> DD.MM.YYYY; HH:MM:SS; 1; 100
 #define LOCALSTORAGE_FILE "local.csv"
+
+// Data file for SD file write/read operations
+LFile dataFile;
 
 // GPRS client for server communication
 LGPRSClient client;
 
 // Server URL
 #define SERVER_URL "bootcamp01.000webhostapp.com"
+// Uncomment for testing purpose
+// #define SERVER_URL "www.httpbin.org"
 
 // Time server
 #define TIME_SERVER "0.nl.pool.ntp.org" // a list of NTP servers: http://tf.nist.gov/tf-cgi/servers.cgi
@@ -45,10 +53,10 @@ datetimeInfo currentTime;
 ADXL345 adxl;
 
 // Intervals to proceed with periodical operations
-// 10 seconds (will be 5 minutes in final version)
-const long millisIntervalStore = 10000;
-// 1800 seconds (30 minutes)
-const long millisIntervalSend = 180000;
+// 3 seconds (will be 5 minutes in final version)
+const long millisIntervalStore = 3000;
+// 20 seconds (will be 30 or 60 minutes in final version)
+const long millisIntervalSend = 20000;
 
 // long value for millis operations
 unsigned long previousMillisStore = 0;
@@ -100,6 +108,9 @@ void setup() {
   // Power on the accelerometer
   adxl.powerOn();
 
+  // Set current timestamp after setup finished
+  unsigned long previousMillisStore = millis();
+  unsigned long previousMillisSend = millis();
 }
 
 void loop() {
@@ -140,7 +151,6 @@ void loop() {
   if (currentMillisStore - previousMillisStore >= millisIntervalStore) {
     // save the last time an update was sent
     previousMillisStore = currentMillisStore;
-
     // Write to SD card
     writeToStorage();
     // Reset detection boolean
@@ -163,7 +173,6 @@ void loop() {
 
   // Wait to not overload
   delay(700);
-
 }
 
 
@@ -173,10 +182,10 @@ void writeToStorage() {
   // Create strings that will be written to the SD card files
   String cacheString = buildJsonString();
   String localString = buildExcelString();
- 
+
   // Open cache file with write access
   Serial.println("Trying to access files on SD card");
-  LFile dataFile = LSD.open(CACHE_FILE, FILE_WRITE);
+  dataFile = LSD.open(CACHE_FILE, FILE_WRITE);
   Serial.println("Cache file opened");
   // if the file is available, write to it:
   if (dataFile) {
@@ -206,38 +215,125 @@ void writeToStorage() {
   else {
     Serial.println("error opening local storage file");
   }
-
   Serial.println();
 }
 
+// Build JSON String and send that string via POST method to server
 void sendData() {
-  // TODO: Implement building JSON String and send that string via POST method to server
-  
-  Serial.println("Sending data to webserver...");
-  buildJson();
+  // Tutorial: https://ubidots.com/docs/devices/linkitoneWiFi.html#send-multiple-values-to-ubidots
 
-  // TODO: If success response from server -> emptyCache
+  String payload = buildJson();
+
+  // Try to connect to the webserver
+  while (!client.connect(SERVER_URL, 80))
+  {
+    Serial.println("Retrying to connect...");
+    delay(100);
+    // TODO: Counter if there's a connection error
+  }
+  Serial.println("Client reconnected!");
+
+  Serial.println("Sending data to webserver:");
+  Serial.println(payload);
+
+  // Build HTTP POST request
+  client.print("POST /mass_insert.php");
+  // client.print("POST /post");
+  client.println(" HTTP/1.1");
+  client.print("Host: ");
+  client.println(SERVER_URL);
+  client.print("User-Agent: ");
+  client.println(DEVICE_NAME);
+  client.println("Connection: close");
+  client.println("Content-Type: application/json; charset=UTF-8");
+  client.print("Content-Length: ");
+  client.println(payload.length());
+  client.println();
+  client.println(payload);
+  client.println();
+
+  Serial.println("Data sent, waiting for response...");
+
+  // read/print server response
+  while (client.connected()) {
+    while (client.available()) {
+      Serial.write(client.read());
+    }
+  }
+  client.stop();
+
+  // TODO: Only if success response from server -> emptyCache, else keep cache contents
+  emptyCache();
 }
-
 
 
 
 //________________________
 // HELPERS
 
-String buildJson(){
-  // TODO: create JSON (string) file for server from data of cache file
-  
+String buildJson() {
+  // TODO: Update buildJson to get rid of null value at the end and have comma in same line
+
+  // Start return string by opening square brackets
+  String returnString = "[";
+  // returnString += "\n";
+
+  // Open file from sd card
+  dataFile = LSD.open(CACHE_FILE);
+
+  if (dataFile) {
+    dataFile.seek(0);
+    // read from the file until there's nothing else in it:
+    while (dataFile.available()) {
+      char dataFileLine = dataFile.read();
+      if (dataFileLine == '\n') {
+        returnString += ",";
+      } else {
+        returnString += dataFileLine;
+      }
+    }
+    // close the file:
+    dataFile.close();
+  } else {
+    // if the file didn't open, print an error:
+    Serial.println("buildJson(): error opening cache file");
+  }
+
+  // Remove last comma (",") if return string with at least one value was created
+  if (returnString.length() > 6) {
+    int length = returnString.length();
+    returnString[length - 1] = '\0';
+  }
+
+  // End return string by closing square brackets
+  returnString += "]";
+
+  Serial.println("JSON string for post request created:");
+
+  // Return the created JSON format style string
+  return returnString;
 }
 
 // Empty (or delete) the cache file on the SD card
 void emptyCache() {
   // TODO: Clear the chache file contents (e.g. when sending to server was successful)
+
+  if (LSD.remove(CACHE_FILE)) {
+    dataFile = LSD.open(CACHE_FILE, FILE_WRITE);
+    if (dataFile) {
+      Serial.println("Old cache file deleted, new cache file created");
+      dataFile.close();
+    } else {
+      Serial.println("Could not create new cache file!");
+    }
+  } else {
+    Serial.println("Cache file could not be removed!");
+  }
 }
 
 // Returns one line string for the cache.txt file
 String buildJsonString() {
-    
+
   String returnString;
   returnString += "{";
   returnString += "\"time\": ";
@@ -261,7 +357,7 @@ String buildJsonString() {
   returnString += LBattery.level();
   returnString += "\"";
   returnString += "}";
-  
+
   return returnString;
 }
 
@@ -270,7 +366,7 @@ String buildExcelString() {
 
   // String that gets written to local storage and cache files
   String returnString;
-  
+
   returnString += getDateString(currentTime);
   returnString += " ";
   returnString += getTimeString(currentTime);
@@ -324,7 +420,7 @@ String getTimeString(datetimeInfo dti) {
   return timeStr;
 }
 
-// NTP time server stuff
+// NTP time server
 //____________________________________________
 
 // Connect to udp/time server, https://github.com/brucetsao/techbang/blob/master/201511/LinkIt-ONE-IDE/hardware/arduino/mtk/libraries/LGPRS/examples/GPRSUdpNtpClient/GPRSUdpNtpClient.ino
@@ -364,7 +460,7 @@ void getNtpTime() {
     Serial.print("Seconds since Jan 1 1900 = " );
     Serial.println(secsSince1900);
 
-    // subtract 2 hours to get Amsterdam timezone
+    // add 2 hours (7200 seconds) to get Amsterdam timezone
     secsSince1900 = secsSince1900 + 7200;
 
     // now convert NTP time into everyday time:
