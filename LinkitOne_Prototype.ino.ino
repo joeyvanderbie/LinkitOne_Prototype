@@ -21,7 +21,7 @@
 
 // SD card file names
 // temporarly contains information in JSON format style
-// Line format -> {"time": "YYYY-MM-DD HH:MM:SS", "state": "1", "battery": "100"}
+// Line format -> {"time": "YYYY-MM-DD HH:MM:SS", "state": 1, "battery": 100}
 #define CACHE_FILE "cache.txt"
 // contains all information in excel format style
 // Line format -> DD.MM.YYYY; HH:MM:SS; 1; 100
@@ -56,10 +56,10 @@ datetimeInfo currentTime;
 ADXL345 adxl;
 
 // Intervals to proceed with periodical operations
-// 3 seconds (will be 5 minutes in final version)
-const long millisIntervalStore = 3000;
-// 20 seconds (will be 30 or 60 minutes in final version)
-const long millisIntervalSend = 20000;
+// 5 minutes (300 seconds, 300000 milliseconds) 
+const long millisIntervalStore = 300000;
+// 60 minutes (3600 seconds, 3600000 milliseconds) 
+const long millisIntervalSend = 3600000;
 
 // long value for millis operations
 unsigned long previousMillisStore = 0;
@@ -79,8 +79,8 @@ const int acceleromationTreshold = 20;
 // manual time variables (IMPORTANT: needs to be manually updated before placing sensor)
 // TODO: Find a funtion to calculate the date out of the UNIX timestamp
 int year = 2017;
-int mon = 5;
-int day = 31;
+int mon = 6;
+int day = 9;
 int hour = 0;
 int min = 0;
 int sec = 0;
@@ -132,8 +132,9 @@ void loop() {
   adxl.readXYZ(&x, &y, &currentValue);
 
   // Print all measured differences for treshold testing purposes
-  Serial.print("Z: ");
-  Serial.println(abs(currentValue - previousValue));
+  //Serial.print("Z: ");
+  //Serial.println(abs(currentValue - previousValue));
+  
   //  Serial.print("X: ");
   //  Serial.println(abs(x - previousValueX));
   //  Serial.print("Y: ");
@@ -146,8 +147,8 @@ void loop() {
     if (abs(currentValue - previousValue) > acceleromationTreshold) {
       usageDetected = true;
       // Print timestamp of usage measurement
-      Serial.print(getDateString(currentTime));
-      Serial.println(": Usage detected! No more measurements till next update");
+      //Serial.print(getDateString(currentTime));
+      //Serial.println(": Usage detected! No more measurements till next update");
       Serial.println();
     }
   }
@@ -266,6 +267,7 @@ void sendData() {
   while (client.connected()) {
     while (client.available()) {
       Serial.write(client.read());
+      // TODO: Check for 'SUCCESS' in response
     }
   }
   client.stop();
@@ -283,15 +285,11 @@ void sendData() {
 // Return string in JSON style format containing the contents of the cache file
 //__________________________________________________________________
 String buildJson() {
-  // TODO: Update buildJson to get rid of null value at the end and have comma in same line
 
   // Start return string by opening square brackets
   String returnString = "[";
   // returnString += "\n";
-  returnString += "{\"name\": ";
-  returnString += DEVICE_NAME;
-  returnString += "},";
-
+  
   // Open file from sd card
   dataFile = LSD.open(CACHE_FILE);
 
@@ -306,17 +304,17 @@ String buildJson() {
         returnString += dataFileLine;
       }
     }
+    
+    // Add device name at the end of JSON array
+    returnString += "{\"name\": \"";
+    returnString += DEVICE_NAME;
+    returnString += "\"}";
+    
     // close the file:
     dataFile.close();
   } else {
     // if the file didn't open, print an error:
     Serial.println("buildJson(): error opening cache file");
-  }
-
-  // Remove last comma (",") if return string with at least one value was created
-  if (returnString.length() > 6) {
-    int length = returnString.length();
-    returnString[length - 1] = '\0';
   }
 
   // End return string by closing square brackets
@@ -335,6 +333,7 @@ void emptyCache() {
   // TODO: Clear the chache file contents (e.g. when sending to server was successful)
 
   if (LSD.remove(CACHE_FILE)) {
+    delay(200);
     dataFile = LSD.open(CACHE_FILE, FILE_WRITE);
     if (dataFile) {
       Serial.println("Old cache file deleted, new cache file created");
@@ -362,18 +361,14 @@ String buildJsonString() {
   returnString += "\"";
   returnString += ",";
   returnString += "\"state\": ";
-  returnString += "\"";
   if (usageDetected) {
     returnString += "1";
   } else {
     returnString += "0";
   }
-  returnString += "\"";
   returnString += ",";
   returnString += "\"battery\": ";
-  returnString += "\"";
   returnString += LBattery.level();
-  returnString += "\"";
   returnString += "}";
 
   return returnString;
