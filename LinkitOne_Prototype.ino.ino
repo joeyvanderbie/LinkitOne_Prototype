@@ -29,6 +29,8 @@
 // contains all information in excel format style
 // Line format -> DD.MM.YYYY; HH:MM:SS; 1; 100
 #define LOCALSTORAGE_FILE "local.csv"
+// contains times of battery charging in excel format style
+#define BATTERY_FILE "battery.csv"
 
 // Data file for SD file write/read operations
 LFile dataFile;
@@ -46,11 +48,11 @@ LGPRSClient client;
 // GPRS UDP package for the time server
 LGPRSUDP Udp;
 // local port to listen for UDP packets
-unsigned int localPort = 2390;  
-// NTP time stamp is in the first 48 bytes of the message    
-const int NTP_PACKET_SIZE = 48; 
+unsigned int localPort = 2390;
+// NTP time stamp is in the first 48 bytes of the message
+const int NTP_PACKET_SIZE = 48;
 //buffer to hold incoming and outgoing packets
-byte packetBuffer[NTP_PACKET_SIZE]; 
+byte packetBuffer[NTP_PACKET_SIZE];
 
 // datetimeinfo variable that should hold the current time after the setup
 datetimeInfo currentTime;
@@ -59,11 +61,11 @@ datetimeInfo currentTime;
 ADXL345 adxl;
 
 // Intervals to proceed with periodical operations
-// 5 minutes (300 seconds, 300000 milliseconds) 
+// 5 minutes (300 seconds, 300000 milliseconds)
 const long millisIntervalStore = 300000;
-// 60 minutes (3600 seconds, 3600000 milliseconds) 
+// 60 minutes (3600 seconds, 3600000 milliseconds)
 const long millisIntervalSend = 3600000;
-// 60 minutes (3600 seconds, 3600000 milliseconds) 
+// 60 minutes (3600 seconds, 3600000 milliseconds)
 const long millisIntervalBattery = 3600000;
 
 // long value for millis operations
@@ -86,14 +88,14 @@ const int acceleromationTreshold = 20;
 // TODO: Find a funtion to calculate the date out of the UNIX timestamp
 int year = 2017;
 int mon = 6;
-int day = 9;
+int day = 13;
 int hour = 0;
 int min = 0;
 int sec = 0;
 
 
 void setup() {
-  
+
   Serial.begin(9600);
 
   // Set relay pin to output
@@ -148,7 +150,7 @@ void loop() {
   // Print all measured differences for treshold testing purposes
   //Serial.print("Z: ");
   //Serial.println(abs(currentValue - previousValue));
-  
+
   //  Serial.print("X: ");
   //  Serial.println(abs(x - previousValueX));
   //  Serial.print("Y: ");
@@ -189,7 +191,7 @@ void loop() {
   // Check battery level every x minutes/seconds
   if (currentMillisBattery - previousMillisBattery >= millisIntervalBattery) {
     // save the last time the battery was checked
-    previousMillisSend = currentMillisSend;
+    previousMillisBattery = currentMillisBattery;
 
     // Trigger the power bank with the relay if battery level gets below 33%
     if (LBattery.level() >= 33) {
@@ -200,10 +202,22 @@ void loop() {
       delay(1000);
       // turn the LED/relay pin off by setting voltage to LOW
       digitalWrite(LED_BUILTIN, LOW);
+
+      // Print battery loading to file on SD card
+      dataFile = LSD.open(BATTERY_FILE, FILE_WRITE);
+      if (dataFile) {
+        String returnString = "";
+        returnString += getDateString(currentTime);
+        returnString += " ";
+        returnString += getTimeString(currentTime);
+        returnString += "; battery is getting charged";
+        dataFile.println(returnString);
+        dataFile.close();
+      }
     }
   }
 
-  
+
 
   // Update the previous measured value with the current measured value
   previousValue = currentValue;
@@ -322,7 +336,7 @@ String buildJson() {
   // Start return string by opening square brackets
   String returnString = "[";
   // returnString += "\n";
-  
+
   // Open file from sd card
   dataFile = LSD.open(CACHE_FILE);
 
@@ -337,12 +351,12 @@ String buildJson() {
         returnString += dataFileLine;
       }
     }
-    
+
     // Add device name at the end of JSON array
     returnString += "{\"name\": \"";
     returnString += DEVICE_NAME;
     returnString += "\"}";
-    
+
     // close the file:
     dataFile.close();
   } else {
