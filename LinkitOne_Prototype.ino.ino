@@ -16,6 +16,9 @@
 // Date and time
 #include <LDateTime.h>
 
+// Define Pin to power relay
+#define LED_BUILTIN 0
+
 // Device name (for each device individual)
 #define DEVICE_NAME "cruyff_court_01"
 
@@ -60,10 +63,13 @@ ADXL345 adxl;
 const long millisIntervalStore = 300000;
 // 60 minutes (3600 seconds, 3600000 milliseconds) 
 const long millisIntervalSend = 3600000;
+// 60 minutes (3600 seconds, 3600000 milliseconds) 
+const long millisIntervalBattery = 3600000;
 
 // long value for millis operations
 unsigned long previousMillisStore = 0;
 unsigned long previousMillisSend = 0;
+unsigned long previousMillisBattery = 0;
 
 // Boolean that shows whether usage/vibration was detected
 boolean usageDetected = false;
@@ -90,6 +96,11 @@ void setup() {
   
   Serial.begin(9600);
 
+  // Set relay pin to output
+  pinMode(LED_BUILTIN, OUTPUT);
+  // Turn relay pin off
+  digitalWrite(LED_BUILTIN, LOW);
+
   // Initialize the SD card
   Serial.print("Initializing SD card...");
   LSD.begin();
@@ -114,8 +125,9 @@ void setup() {
   adxl.powerOn();
 
   // Set current timestamp after setup finished
-  unsigned long previousMillisStore = millis();
-  unsigned long previousMillisSend = millis();
+  previousMillisStore = millis();
+  previousMillisSend = millis();
+  previousMillisBattery = millis();
 }
 
 void loop() {
@@ -123,8 +135,10 @@ void loop() {
   // Get timestamp of current loop
   LDateTime.getTime(&currentTime);
 
+  // Get current millis values for time comparisons
   unsigned long currentMillisStore = millis();
   unsigned long currentMillisSend = millis();
+  unsigned long currentMillisBattery = millis();
 
   int currentValue; // currently z axis values for upright position
   int y, x;
@@ -147,8 +161,8 @@ void loop() {
     if (abs(currentValue - previousValue) > acceleromationTreshold) {
       usageDetected = true;
       // Print timestamp of usage measurement
-      //Serial.print(getDateString(currentTime));
-      //Serial.println(": Usage detected! No more measurements till next update");
+      Serial.print(getDateString(currentTime));
+      Serial.println(": Usage detected! No more measurements till next update");
       Serial.println();
     }
   }
@@ -171,6 +185,25 @@ void loop() {
     // Send data to web server (still in test state)
     sendData();
   }
+
+  // Check battery level every x minutes/seconds
+  if (currentMillisBattery - previousMillisBattery >= millisIntervalBattery) {
+    // save the last time the battery was checked
+    previousMillisSend = currentMillisSend;
+
+    // Trigger the power bank with the relay if battery level gets below 33%
+    if (LBattery.level() >= 33) {
+      Serial.println("Battery level dropped below 33%, triggering the power bank...");
+      // turn the LED/relay pin on by setting voltage to HIGH
+      digitalWrite(LED_BUILTIN, HIGH);
+      // wait for one second
+      delay(1000);
+      // turn the LED/relay pin off by setting voltage to LOW
+      digitalWrite(LED_BUILTIN, LOW);
+    }
+  }
+
+  
 
   // Update the previous measured value with the current measured value
   previousValue = currentValue;
