@@ -103,7 +103,7 @@ int sec = 0;
 
 
 void setup() {
-
+  Wire.begin();   //begin I2c
   Serial.begin(9600);
 
   // Set relay pin to output
