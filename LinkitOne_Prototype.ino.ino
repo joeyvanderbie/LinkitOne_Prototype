@@ -88,7 +88,7 @@ const int acceleromationTreshold = 20;
 // TODO: Find a funtion to calculate the date out of the UNIX timestamp
 int year = 2017;
 int mon = 6;
-int day = 13;
+int day = 14;
 int hour = 0;
 int min = 0;
 int sec = 0;
