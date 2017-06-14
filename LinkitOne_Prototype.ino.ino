@@ -1,6 +1,12 @@
+#include <Wire.h>
+#include <I2Cdev.h>
+#include <MPU6050.h>
+
+// The version for the alternate accelerometer
+
 #include "LTask.h"
 // Accelerometer
-#include <ADXL345.h>
+
 // Batter level and state
 #include <LBattery.h>
 // SD card
@@ -15,6 +21,8 @@
 #include <LGPRSUdp.h>
 // Date and time
 #include <LDateTime.h>
+
+#define OUTPUT_READABLE_ACCELGYRO
 
 // Define Pin to power relay
 #define LED_BUILTIN 0
@@ -57,8 +65,8 @@ byte packetBuffer[NTP_PACKET_SIZE];
 // datetimeinfo variable that should hold the current time after the setup
 datetimeInfo currentTime;
 
-//variable adxl is an instance of the ADXL345 library (accelerometer)
-ADXL345 adxl;
+//variable accelgyro is an instance of the MPU6050 library (accelerometer)
+MPU6050 accelgyro;
 
 // Intervals to proceed with periodical operations
 // 5 minutes (300 seconds, 300000 milliseconds)
@@ -77,12 +85,12 @@ unsigned long previousMillisBattery = 0;
 boolean usageDetected = false;
 
 // Initial previous measured value
-int previousValue = 0;
-int previousValueX = 0;
-int previousValueY = 0;
+int16_t previousValue = 0;
+int16_t previousValueX = 0;
+int16_t previousValueY = 0;
 
 // treshold when acceleration is triggered as movement/usage
-const int acceleromationTreshold = 20;
+const int acceleromationTreshold = 10000;
 
 // manual time variables (IMPORTANT: needs to be manually updated before placing sensor)
 // TODO: Find a funtion to calculate the date out of the UNIX timestamp
@@ -124,7 +132,9 @@ void setup() {
   setTime();
 
   // Power on the accelerometer
-  adxl.powerOn();
+  Serial.println("Initializing I2C devices...");
+  accelgyro.initialize();
+  Serial.println(accelgyro.testConnection() ? "MPU6050 connection successful" : "MPU6050 connection failed");
 
   // Set current timestamp after setup finished
   previousMillisStore = millis();
@@ -142,14 +152,14 @@ void loop() {
   unsigned long currentMillisSend = millis();
   unsigned long currentMillisBattery = millis();
 
-  int currentValue; // currently z axis values for upright position
-  int y, x;
-  //read the accelerometer values and store them in variables x,y,z
-  adxl.readXYZ(&x, &y, &currentValue);
+  int16_t currentValue; // currently z axis values for upright position
+  int16_t y, x;
+  //read the accelerometer values and store them in variables x,y,currentValue
+  accelgyro.getAcceleration(&x, &y, &currentValue);
 
   // Print all measured differences for treshold testing purposes
-  //Serial.print("Z: ");
-  //Serial.println(abs(currentValue - previousValue));
+  Serial.print("Z: ");
+  Serial.println(abs(currentValue - previousValue));
 
   //  Serial.print("X: ");
   //  Serial.println(abs(x - previousValueX));
