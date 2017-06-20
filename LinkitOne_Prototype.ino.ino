@@ -96,7 +96,7 @@ const int acceleromationTreshold = 10000;
 // TODO: Find a funtion to calculate the date out of the UNIX timestamp
 int year = 2017;
 int mon = 6;
-int day = 14;
+int day = 15;
 int hour = 0;
 int min = 0;
 int sec = 0;
@@ -140,6 +140,9 @@ void setup() {
   previousMillisStore = millis();
   previousMillisSend = millis();
   previousMillisBattery = millis();
+  
+  // Send previous measured data at first start
+  sendData();
 }
 
 void loop() {
@@ -194,7 +197,7 @@ void loop() {
     // save the last time an update was sent
     previousMillisSend = currentMillisSend;
 
-    // Send data to web server (still in test state)
+    // Send data to web server
     sendData();
   }
 
@@ -204,7 +207,7 @@ void loop() {
     previousMillisBattery = currentMillisBattery;
 
     // Trigger the power bank with the relay if battery level gets below 33%
-    if (LBattery.level() >= 33) {
+    if (LBattery.level() <= 33) {
       Serial.println("Battery level dropped below 33%, triggering the power bank...");
       // turn the LED/relay pin on by setting voltage to HIGH
       digitalWrite(LED_BUILTIN, HIGH);
